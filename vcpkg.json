@@ -1,0 +1,12 @@
+{
+  "name": "minimal-audio-engine",
+  "version": "0.1.0",
+  "description": "Minimal Audio Engine - Cross-platform Digital Audio Workstation",
+  "dependencies": [
+    "rtaudio",
+    "rtmidi",
+    "libsndfile",
+    "gtest"
+  ],
+  "builtin-baseline": "1d611efb49276c65d69fb6d010c2aaaf039322b0"
+}

@@ -9,8 +9,8 @@ add_executable(EmbeddedAudioEngineUnitTests
 )
 
 target_link_libraries(EmbeddedAudioEngineUnitTests PRIVATE
-  gtest
-  gtest_main
+  GTest::gtest
+  GTest::gtest_main
   audioengine
   trackmanager
   filemanager

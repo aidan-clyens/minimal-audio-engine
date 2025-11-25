@@ -1,229 +1,318 @@
-# Windows Docker Setup Guide
+# Windows Native Build Guide
 
-This guide explains how to use the Minimal Audio Engine Docker development environment on Windows.
+This guide explains how to build the Minimal Audio Engine natively on Windows (producing a `.exe` executable).
 
 ## Prerequisites
 
-1. **Windows 10/11 (64-bit)** with WSL2 enabled
-2. **Docker Desktop for Windows** (latest version)
-   - Download from: https://www.docker.com/products/docker-desktop
-   - Must be configured to use the **WSL2 backend** (default in recent versions)
-3. **PowerShell** or **Command Prompt**
+### 1. Visual Studio
+- **Visual Studio 2019** or **Visual Studio 2022** (Community Edition or higher)
+- During installation, select **"Desktop development with C++"** workload
+- Ensure **CMake tools** are included (checked by default)
 
-## Initial Setup
+### 2. CMake
+- **CMake 3.25 or higher**
+- Download from: https://cmake.org/download/
+- During installation, select "Add CMake to system PATH"
+- Verify installation:
+  ```cmd
+  cmake --version
+  ```
 
-### 1. Install Docker Desktop
+### 3. vcpkg (Dependency Manager)
+vcpkg is Microsoft's C++ package manager and is the recommended way to install dependencies on Windows.
 
-1. Download and install Docker Desktop for Windows
-2. During installation, ensure "Use WSL 2 instead of Hyper-V" is selected
-3. After installation, launch Docker Desktop and wait for it to start
-4. Verify Docker is running:
-   ```powershell
-   docker --version
-   docker ps
-   ```
-
-### 2. Enable Cross-Architecture Support (Optional)
-
-To build for both x86_64 and ARM64 architectures on Windows:
-
+**Installation:**
 ```cmd
-cd docker
-docker-setup.bat
+cd C:\
+git clone https://github.com/Microsoft/vcpkg.git
+cd vcpkg
+bootstrap-vcpkg.bat
 ```
 
-This sets up Docker Buildx for multi-platform builds.
-
-## Building the Docker Image
-
-### Standard Build (x86_64/amd64)
-
-From the project root directory:
-
+**Add vcpkg to PATH** (optional but recommended):
 ```cmd
-cd docker
-docker-build.bat
+setx PATH "%PATH%;C:\vcpkg"
 ```
 
-### Multi-Architecture Build
-
-To build for both AMD64 and ARM64:
-
+**Integrate with Visual Studio:**
 ```cmd
-docker buildx build --platform linux/amd64,linux/arm64 -t minimal-audio-engine:latest .
+vcpkg integrate install
 ```
 
-## Running the Container
+## Installing Dependencies
 
-### Start Container in Background
+The project uses a `vcpkg.json` manifest file to automatically manage dependencies.
+
+### Option 1: Automatic Installation (Recommended)
+When you configure the project with CMake, vcpkg will automatically install the required dependencies if you use the vcpkg toolchain file.
+
+### Option 2: Manual Installation
+Install dependencies manually before building:
 
 ```cmd
-cd docker
-docker-run.bat
+cd C:\vcpkg
+vcpkg install rtaudio:x64-windows
+vcpkg install rtmidi:x64-windows
+vcpkg install libsndfile:x64-windows
+vcpkg install gtest:x64-windows
 ```
 
-This starts the container in detached mode with your workspace mounted at `/workspace/minimal-audio-engine`.
+For 32-bit builds, use `:x86-windows` instead of `:x64-windows`.
 
-### Execute Commands in Running Container
+## Building the Project
+
+### Method 1: Using CMake GUI
+
+1. **Open CMake GUI**
+   - Launch `cmake-gui` from the Start Menu
+
+2. **Set Source Directory**
+   - Browse to your project directory (e.g., `C:\Projects\minimal-audio-engine`)
+
+3. **Set Build Directory**
+   - Create/select a build directory (e.g., `C:\Projects\minimal-audio-engine\build`)
+
+4. **Configure**
+   - Click "Configure"
+   - Select your Visual Studio version (e.g., "Visual Studio 17 2022")
+   - Select platform: `x64` (or `Win32` for 32-bit)
+   - **Important:** Add this CMake variable:
+     - Name: `CMAKE_TOOLCHAIN_FILE`
+     - Type: `FILEPATH`
+     - Value: `C:/vcpkg/scripts/buildsystems/vcpkg.cmake`
+   - Click "Finish"
+
+5. **Generate**
+   - After configuration completes, click "Generate"
+
+6. **Open in Visual Studio**
+   - Click "Open Project" or navigate to the build directory and open `DAW.sln`
+
+7. **Build in Visual Studio**
+   - Select build configuration: `Debug` or `Release`
+   - Build → Build Solution (or press `Ctrl+Shift+B`)
+
+### Method 2: Using Command Line
+
+Open **Developer Command Prompt for Visual Studio** or **PowerShell**:
 
 ```cmd
-cd docker
-docker-exec.bat
+# Navigate to project directory
+cd C:\Projects\minimal-audio-engine
+
+# Create build directory
+mkdir build
+cd build
+
+# Configure with CMake (using vcpkg)
+cmake .. -G "Visual Studio 17 2022" -A x64 ^
+  -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
+
+# Build
+cmake --build . --config Release
+
+# Or build with Debug configuration
+cmake --build . --config Debug
 ```
 
-This opens an interactive bash shell inside the running container.
+### Method 3: Using Visual Studio Code
 
-### Run One-Off Commands
+If you have VS Code installed with CMake Tools extension:
+
+1. Open the project folder in VS Code
+2. Open Command Palette (`Ctrl+Shift+P`)
+3. Run: `CMake: Configure`
+4. When prompted, select:
+   - Kit: Visual Studio Community 2022 Release - amd64
+   - Configure preset or manually set toolchain file
+5. Run: `CMake: Build`
+
+## Build Output
+
+After a successful build, you'll find the executable at:
+- **Debug build:** `build\src\Debug\EmbeddedAudioEngine.exe`
+- **Release build:** `build\src\Release\EmbeddedAudioEngine.exe`
+
+## Running the Application
 
 ```cmd
-cd docker
-docker-run-cmd.bat [command]
+# From the build directory
+cd src\Release
+EmbeddedAudioEngine.exe
+
+# Or from project root
+build\src\Release\EmbeddedAudioEngine.exe
 ```
 
-Examples:
+## Running Tests
+
+The unit tests are built automatically:
+
 ```cmd
-docker-run-cmd.bat cmake --version
-docker-run-cmd.bat bash -c "cd build && cmake .."
+# Run tests from build directory
+cd build
+
+# Using CTest
+ctest -C Release --output-on-failure
+
+# Or run the test executable directly
+tests\unit\Release\EmbeddedAudioEngineUnitTests.exe
 ```
 
-## Development Workflow
+## CMake Presets (Alternative)
 
-1. **Start the container:**
-   ```cmd
-   cd docker
-   docker-run.bat
-   ```
+For easier configuration, you can create a `CMakePresets.json` file:
 
-2. **Access the container:**
-   ```cmd
-   docker-exec.bat
-   ```
+```json
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "windows-x64-release",
+      "displayName": "Windows x64 Release",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_TOOLCHAIN_FILE": "C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
+      }
+    },
+    {
+      "name": "windows-x64-debug",
+      "displayName": "Windows x64 Debug",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_TOOLCHAIN_FILE": "C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "windows-release",
+      "configurePreset": "windows-x64-release",
+      "configuration": "Release"
+    },
+    {
+      "name": "windows-debug",
+      "configurePreset": "windows-x64-debug",
+      "configuration": "Debug"
+    }
+  ]
+}
+```
 
-3. **Inside the container, build the project:**
-   ```bash
-   mkdir -p build
-   cd build
-   cmake ..
-   make
-   ```
-
-4. **Run tests:**
-   ```bash
-   ctest --output-on-failure
-   ```
-
-5. **Exit the container:**
-   ```bash
-   exit
-   ```
-
-6. **Stop the container (when done):**
-   ```cmd
-   docker stop minimal-audio-engine
-   ```
-
-7. **Remove the container:**
-   ```cmd
-   docker rm minimal-audio-engine
-   ```
-
-## Windows-Specific Notes
-
-### Volume Mounting
-
-- The batch scripts use `%CD%` to mount the current directory
-- Files are mounted at `/workspace/minimal-audio-engine` inside the container
-- Changes made inside the container are reflected on your Windows filesystem
-
-### Path Differences
-
-- **Windows:** `c:\Projects\minimal-audio-engine`
-- **Container:** `/workspace/minimal-audio-engine`
-
-### Line Endings
-
-Git on Windows may convert line endings to CRLF, which can cause issues with shell scripts in Linux containers. The repository includes a `.gitattributes` file to enforce proper line endings.
-
-**If you encounter "/entrypoint.sh: not found" errors:**
-
-This typically means the entrypoint script has Windows (CRLF) line endings. Fix it by:
-
-1. Ensure `.gitattributes` exists in the repository root
-2. Reset the repository as shown above
-3. Rebuild the Docker image:
-   ```cmd
-   docker-build.bat
-   ```
-
-### SSH Keys (Optional)
-
-Unlike the Linux scripts, the Windows batch scripts don't automatically mount SSH keys. To add SSH support:
-
-Edit `docker-run.bat` and add:
+Then build using:
 ```cmd
--v "%USERPROFILE%\.ssh:/root/.ssh" ^
+cmake --preset windows-x64-release
+cmake --build --preset windows-release
 ```
 
 ## Troubleshooting
 
-### Docker Desktop Not Starting
+### CMake Cannot Find Dependencies
 
-- Ensure WSL2 is properly installed: `wsl --list --verbose`
-- Update Windows to the latest version
-- Restart Docker Desktop
-
-### "Drive is not shared" Error
-
-- Open Docker Desktop Settings
-- Go to Resources → File Sharing
-- Ensure your drive (e.g., C:) is enabled
-
-### Permission Issues
-
-- Docker Desktop runs with elevated privileges by default
-- Ensure Docker Desktop is running before executing batch scripts
-
-### Build Failures
-
-- Check that virtualization is enabled in BIOS
-- Ensure you have sufficient disk space
-- Try cleaning Docker: `docker system prune -a`
-
-### "entrypoint.sh: not found" or "no such file or directory"
-
-This error occurs when shell scripts have Windows (CRLF) line endings instead of Unix (LF) line endings.
+**Problem:** CMake reports "Could not find RtAudio", "Could not find RtMidi", etc.
 
 **Solution:**
-1. Reset line endings:
-   ```cmd
-   git rm --cached -r .
-   git reset --hard
-   ```
+- Ensure you're using the vcpkg toolchain file:
+  ```cmd
+  -DCMAKE_TOOLCHAIN_FILE=C:/vcpkg/scripts/buildsystems/vcpkg.cmake
+  ```
+- Verify dependencies are installed:
+  ```cmd
+  vcpkg list
+  ```
+- Install missing dependencies:
+  ```cmd
+  vcpkg install rtaudio:x64-windows rtmidi:x64-windows libsndfile:x64-windows gtest:x64-windows
+  ```
 
-2. Rebuild the Docker image:
-   ```cmd
-   cd docker
-   docker-build.bat
-   ```
+### Build Errors with Missing Headers
 
-3. If the issue persists, check that `.gitattributes` exists in the repository root and contains:
-   ```
-   *.sh text eol=lf
-   docker/entrypoint.sh text eol=lf
-   ```
+**Problem:** Compiler cannot find RtAudio.h, RtMidi.h, etc.
 
-## Comparison: Linux vs Windows Scripts
+**Solution:**
+- Ensure vcpkg integration is active:
+  ```cmd
+  vcpkg integrate install
+  ```
+- Check that dependencies were installed for the correct architecture (x64 vs x86)
 
-| Linux Script | Windows Script | Purpose |
-|--------------|----------------|---------|
-| `docker-build.sh` | `docker-build.bat` | Build Docker image |
-| `docker-run.sh` | `docker-run.bat` | Run container in background |
-| `docker-exec.sh` | `docker-exec.bat` | Access running container |
-| `docker-run-cmd.sh` | `docker-run-cmd.bat` | Run one-off commands |
-| `docker-setup.sh` | `docker-setup.bat` | Setup cross-arch builds |
+### Runtime Errors - Missing DLL Files
+
+**Problem:** Application crashes on startup with "The program can't start because XXX.dll is missing"
+
+**Solution:**
+- When using vcpkg in dynamic mode, DLLs are in `vcpkg\installed\x64-windows\bin`
+- Either:
+  1. Add the bin directory to your PATH
+  2. Copy required DLLs to your executable directory
+  3. Use static linking by installing with `:x64-windows-static` triplet:
+     ```cmd
+     vcpkg install rtaudio:x64-windows-static rtmidi:x64-windows-static libsndfile:x64-windows-static
+     ```
+     Then configure CMake with:
+     ```cmd
+     -DVCPKG_TARGET_TRIPLET=x64-windows-static
+     ```
+
+### Audio Not Working
+
+**Problem:** No audio playback on Windows
+
+**Solution:**
+- RtAudio on Windows uses different backends (DirectSound, WASAPI, ASIO)
+- The application may need to be configured to select the appropriate audio API
+- Check Windows audio device settings and ensure your audio device is enabled
+
+### ALSA Warnings
+
+**Problem:** Console shows warnings about ALSA not being available
+
+**Solution:**
+- This is expected on Windows - ALSA is Linux-only
+- The code gracefully handles this (returns false for `is_alsa_seq_available()`)
+- No action needed; these are informational messages
+
+## Distribution
+
+To distribute your Windows application:
+
+1. **Build in Release mode**
+2. **Collect dependencies:**
+   - The `.exe` file from `build\src\Release\`
+   - Required DLL files from `vcpkg\installed\x64-windows\bin\`
+3. **Create installer** (optional):
+   - Use NSIS, WiX, or Inno Setup
+   - Or simply provide a ZIP file with the executable and DLLs
+
+## Platform Differences
+
+The following features work differently on Windows vs Linux:
+
+| Feature | Linux | Windows |
+|---------|-------|---------|
+| ALSA Support | ✅ Available | ❌ Not available (returns false) |
+| Audio Backend | ALSA, PulseAudio (via RtAudio) | DirectSound, WASAPI, ASIO (via RtAudio) |
+| MIDI Backend | ALSA MIDI (via RtMidi) | Windows MM, Windows Kernel Streaming (via RtMidi) |
+| Build System | Make, Ninja | Visual Studio, MSBuild |
+| Package Manager | apt, pkg-config | vcpkg |
+
+## Next Steps
+
+- Configure audio device selection in your application
+- Test MIDI input/output with Windows MIDI devices
+- Consider creating a Windows installer
+- Add Windows-specific audio API selection
 
 ## Additional Resources
 
-- [Docker Desktop for Windows Documentation](https://docs.docker.com/desktop/windows/)
-- [WSL2 Setup Guide](https://docs.microsoft.com/en-us/windows/wsl/install)
-- [Docker Buildx Documentation](https://docs.docker.com/buildx/working-with-buildx/)
+- [vcpkg Documentation](https://vcpkg.io/)
+- [CMake Documentation](https://cmake.org/documentation/)
+- [RtAudio Documentation](https://www.music.mcgill.ca/~gary/rtaudio/)
+- [RtMidi Documentation](https://www.music.mcgill.ca/~gary/rtmidi/)
+- [Visual Studio Documentation](https://docs.microsoft.com/en-us/visualstudio/)

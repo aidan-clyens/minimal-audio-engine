@@ -6,8 +6,8 @@ add_executable(EmbeddedAudioEngineTests
 )
 
 target_link_libraries(EmbeddedAudioEngineTests PRIVATE
-  gtest
-  gtest_main
+  GTest::gtest
+  GTest::gtest_main
   framework
   audioengine
   midiengine

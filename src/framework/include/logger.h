@@ -44,7 +44,11 @@ public:
     auto time = std::chrono::system_clock::to_time_t(now);
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()) % 1000;
     std::tm local_time{};
-    localtime_r(&time, &local_time);
+#ifdef _WIN32
+    localtime_s(&local_time, &time);  // Windows: parameters reversed
+#else
+    localtime_r(&time, &local_time);  // POSIX (Linux/Unix)
+#endif
 
     std::ostringstream timestamp_stream;
     timestamp_stream << std::put_time(&local_time, "%Y-%m-%d %H:%M:%S")

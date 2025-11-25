@@ -7,6 +7,11 @@
 #include <thread>
 #include <iostream>
 
+// Define M_PI if not already defined (Windows MSVC compatibility)
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+
 using namespace Audio;
 
 /** @brief AudioEngine constructor
