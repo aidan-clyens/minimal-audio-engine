@@ -2,7 +2,6 @@
 #include "alsa_utils.h"
 
 #include <cmath>
-#include <cassert>
 #include <stdexcept>
 #include <thread>
 #include <iostream>

@@ -4,7 +4,6 @@
 #include <rtmidi/RtMidi.h>
 #include <iostream>
 #include <stdexcept>
-#include <cassert>
 
 using namespace Midi;
 
@@ -18,11 +17,24 @@ using namespace Midi;
  */
 void midi_callback(double deltatime, std::vector<unsigned char> *message, void *user_data)
 {
-  assert(message != nullptr && "Received null MIDI message");
-  assert(user_data != nullptr && "User data is null in MIDI callback");
+  if (message == nullptr)
+  {
+    LOG_ERROR("Received null MIDI message");
+    throw std::runtime_error("Received null MIDI message");
+  }
+
+  if (user_data == nullptr)
+  {
+    LOG_ERROR("User data is null in MIDI callback");
+    throw std::runtime_error("User data is null in MIDI callback");
+  }
 
   MidiEngine *midi_engine = static_cast<MidiEngine *>(user_data);
-  assert(midi_engine != nullptr && "MidiEngine instance is null in MIDI callback");
+  if (midi_engine == nullptr)
+  {
+    LOG_ERROR("MidiEngine instance is null in MIDI callback");
+    throw std::runtime_error("MidiEngine instance is null in MIDI callback");
+  }
 
   // Parse incoming MIDI messages
   MidiMessage midi_message;
@@ -46,14 +58,14 @@ MidiEngine::MidiEngine(): IEngine("MidiEngine")
 {
   if (!is_alsa_seq_available())
   {
-    LOG_INFO("ALSA sequencer not available, skipping MIDI input initialization.");
-    p_midi_in = nullptr;
-    return;
+    LOG_ERROR("ALSA sequencer not available, cannot initialize MIDI input.");
+    throw std::runtime_error("ALSA sequencer not available");
   }
 
   p_midi_in = std::make_unique<RtMidiIn>();
   if (!p_midi_in)
   {
+    LOG_ERROR("Failed to create MIDI input instance.");
     throw std::runtime_error("Failed to create MIDI input instance");
   }
 }
@@ -72,7 +84,11 @@ MidiEngine::~MidiEngine()
  */
 std::vector<MidiPort> MidiEngine::get_ports()
 {
-  assert(p_midi_in != nullptr && "MIDI input instance is not initialized");
+  if (!p_midi_in)
+  {
+    LOG_ERROR("MIDI input is not initialized.");
+    throw std::runtime_error("MIDI input is not initialized.");
+  }
 
   std::vector<MidiPort> ports;
 
@@ -89,7 +105,7 @@ std::vector<MidiPort> MidiEngine::get_ports()
       ports.push_back({i, port_name});
     } catch (const RtMidiError &error)
     {
-      std::cerr << "Error getting port name: " << error.getMessage() << std::endl;
+      LOG_ERROR("Error getting port name: ", error.getMessage());
     }
   }
 
@@ -103,10 +119,15 @@ std::vector<MidiPort> MidiEngine::get_ports()
  */
 void MidiEngine::open_input_port(unsigned int port_number)
 {
-  assert(p_midi_in != nullptr && "MIDI input instance is not initialized");
+  if (!p_midi_in)
+  {
+    LOG_ERROR("MIDI input is not initialized.");
+    throw std::runtime_error("MIDI input is not initialized.");
+  }
 
   if (port_number >= p_midi_in->getPortCount())
   {
+    LOG_ERROR("Invalid MIDI port number: ", port_number);
     throw std::out_of_range("Invalid MIDI port number: " + std::to_string(port_number));
   }
 
@@ -116,7 +137,8 @@ void MidiEngine::open_input_port(unsigned int port_number)
     p_midi_in->openPort(port_number);
   } catch (const RtMidiError &error)
   {
-    throw std::runtime_error("Failed to open MIDI input port: " + error.getMessage());
+    LOG_ERROR("Failed to open MIDI input port: ", error.getMessage());
+    return;
   }
 
   LOG_INFO("MIDI input port opened successfully.");
@@ -129,7 +151,11 @@ void MidiEngine::open_input_port(unsigned int port_number)
  */
 void MidiEngine::close_input_port()
 {
-  assert(p_midi_in != nullptr && "MIDI input instance is not initialized");
+  if (!p_midi_in)
+  {
+    LOG_ERROR("MIDI input is not initialized.");
+    throw std::runtime_error("MIDI input is not initialized.");
+  }
 
   if (!p_midi_in->isPortOpen())
   {
@@ -143,6 +169,6 @@ void MidiEngine::close_input_port()
     LOG_INFO("MIDI input port closed successfully.");
   } catch (const RtMidiError &error)
   {
-    std::cerr << "Error closing MIDI input port: " << error.getMessage() << std::endl;
+    LOG_ERROR("Error closing MIDI input port: ", error.getMessage());
   }
 }
