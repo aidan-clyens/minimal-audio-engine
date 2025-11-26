@@ -24,18 +24,8 @@ AudioEngine::AudioEngine() : IEngine("AudioEngine"),
   m_tracks_playing(0),
   m_total_frames_processed(0)
 {
-  if (is_alsa_seq_available())
-  {
-    LOG_INFO("ALSA sequencer not available on Windows");
-  }
-
   // Set up RtAudio
   p_rtaudio = std::make_unique<RtAudio>();
-  if (!p_rtaudio)
-  {
-    LOG_ERROR("Failed to create RtAudio instance");
-    throw std::runtime_error("Failed to create RtAudio instance");
-  }
 }
 
 /** @brief Return a copy of the AudioEngine statistics
@@ -151,29 +141,38 @@ void AudioEngine::handle_messages()
 {
   while (auto message = try_pop_message())
   {
-    eAudioEngineState state = m_state.load(std::memory_order_acquire);
+    eAudioEngineState current_state = m_state.load(std::memory_order_acquire);
+    eAudioEngineState new_state = current_state;
 
     switch (message->command)
     {
       case eAudioEngineCommand::Play:
         LOG_INFO("AudioEngine: Received Command - Play");
-        if (state == eAudioEngineState::Idle || state == eAudioEngineState::Stopped)
+        if (current_state == eAudioEngineState::Idle || current_state == eAudioEngineState::Stopped)
         {
           LOG_INFO("AudioEngine: Change state to Start");
-          state = eAudioEngineState::Start;
+          new_state = eAudioEngineState::Start;
         }
         break;
       case eAudioEngineCommand::Stop:
         LOG_INFO("AudioEngine: Received Command - Stop");
-        if (state == eAudioEngineState::Running || state == eAudioEngineState::Start)
+        if (current_state == eAudioEngineState::Running || current_state == eAudioEngineState::Start)
         {
           LOG_INFO("AudioEngine: Change state to Stopped");
-          state = eAudioEngineState::Stopped;
+          new_state = eAudioEngineState::Stopped;
         }
         break;
       case eAudioEngineCommand::SetDevice:
         {
           LOG_INFO("AudioEngine: Received Command - SetDevice");
+
+          // Only allow device changes when idle or stopped
+          if (current_state != eAudioEngineState::Idle && current_state != eAudioEngineState::Stopped)
+          {
+            LOG_ERROR("AudioEngine: Cannot change device while running");
+            break;
+          }
+
           auto &payload = std::get<SetDevicePayload>(message->payload);
           m_device_id.store(payload.device_id, std::memory_order_relaxed);
         }
@@ -181,6 +180,14 @@ void AudioEngine::handle_messages()
       case eAudioEngineCommand::SetParams:
         {
           LOG_INFO("AudioEngine: Received Command - SetParams");
+
+          // Only allow parameter changes when idle or stopped
+          if (current_state != eAudioEngineState::Idle && current_state != eAudioEngineState::Stopped)
+          {
+            LOG_ERROR("AudioEngine: Cannot change stream parameters while running");
+            break;
+          }
+
           auto &payload = std::get<SetStreamParamsPayload>(message->payload);
           m_channels.store(payload.channels, std::memory_order_relaxed);
           m_sample_rate.store(payload.sample_rate, std::memory_order_relaxed);
@@ -192,9 +199,9 @@ void AudioEngine::handle_messages()
         break;
     }
 
-    if (state != m_state.load(std::memory_order_relaxed))
+    if (new_state != current_state)
     {
-      m_state.store(state, std::memory_order_release);
+      m_state.store(new_state, std::memory_order_release);
     }
   }
 }
@@ -227,9 +234,12 @@ void AudioEngine::update_state()
  */
 void AudioEngine::update_state_start()
 {
-  if (!p_rtaudio)
-    return;
-  
+  if (p_rtaudio == nullptr)
+  {
+    LOG_ERROR("AudioEngine: RtAudio is not initialized.");
+    throw std::runtime_error("AudioEngine: RtAudio is not initialized");
+  }
+
   try
   {
     if (p_rtaudio->isStreamRunning())
@@ -312,28 +322,38 @@ void AudioEngine::update_state_stopped()
  */
 void AudioEngine::process_audio(float *output_buffer, unsigned int n_frames)
 {
-  unsigned int channels = m_channels.load(std::memory_order_acquire);
-  size_t count = static_cast<size_t>(n_frames) * channels;
-
-  // Parameters for test tone
-  static double phase = 0.0;
-  const double frequency = 440.0; // A4
+  unsigned int channels = m_channels.load(std::memory_order_relaxed);
   const double sampleRate = static_cast<double>(m_sample_rate.load(std::memory_order_relaxed));
-  const double phaseIncrement = (2.0 * M_PI * frequency) / sampleRate;
-  const float amplitude = 0.2f; // Safe volume
 
-  for (unsigned int frame = 0; frame < n_frames; ++frame)
+  if (m_test_tone_enabled.load(std::memory_order_relaxed))
   {
-    float sample = amplitude * std::sin(phase);
-    phase += phaseIncrement;
-    if (phase >= 2.0 * M_PI)
-      phase -= 2.0 * M_PI;
+    // TEST: Generate a simple sine wave tone for testing
+    // Parameters for test tone
+    double phase = m_test_tone_phase.load(std::memory_order_relaxed);
+    const double frequency = 440.0; // A4
+    const double phaseIncrement = (2.0 * M_PI * frequency) / sampleRate;
+    const float amplitude = 0.2f; // Safe volume
 
-    // Write the same sample to all channels (interleaved)
-    for (unsigned int ch = 0; ch < channels; ++ch)
+    for (unsigned int frame = 0; frame < n_frames; ++frame)
     {
-      output_buffer[frame * channels + ch] = sample;
+      float sample = amplitude * std::sin(phase);
+      phase += phaseIncrement;
+      if (phase >= 2.0 * M_PI)
+        phase -= 2.0 * M_PI;
+
+      // Write the same sample to all channels (interleaved)
+      for (unsigned int ch = 0; ch < channels; ++ch)
+      {
+        output_buffer[frame * channels + ch] = sample;
+      }
     }
+
+    m_test_tone_phase.store(phase, std::memory_order_relaxed);
+  }
+  else
+  {
+    // Clear output buffer
+    std::fill(output_buffer, output_buffer + n_frames * channels, 0.0f);
   }
 
   // Update statistics
@@ -351,14 +371,36 @@ void AudioEngine::process_audio(float *output_buffer, unsigned int n_frames)
  *  @return 0 on success, non-zero on error
  */
 int AudioEngine::audio_callback(void *output_buffer, void *input_buffer, unsigned int n_frames,
-                                 double stream_time, RtAudioStreamStatus status, void *user_data)
+                                 double stream_time, RtAudioStreamStatus status, void *user_data) noexcept
 {
-  AudioEngine *engine = static_cast<AudioEngine*>(user_data);
-  if (!engine)
+  try
   {
+    if (output_buffer == nullptr || input_buffer == nullptr)
+    {
+      LOG_ERROR("AudioEngine: Null output or input buffer in audio callback");
+      return 1; // Error code
+    }
+  
+    if (user_data == nullptr)
+    {
+      LOG_ERROR("AudioEngine: Null user data in audio callback");
+      return 1; // Error code
+    }
+  
+    AudioEngine *engine = reinterpret_cast<AudioEngine*>(user_data);
+    if (engine == nullptr)
+    {
+      LOG_ERROR("AudioEngine: Invalid AudioEngine instance in audio callback");
+      return 1; // Error code
+    }
+  
+    engine->process_audio(static_cast<float*>(output_buffer), n_frames);
+  }
+  catch (const std::exception &e)
+  {
+    LOG_ERROR("AudioEngine: Exception in audio callback: ", e.what());
     return 1; // Error code
   }
 
-  engine->process_audio(static_cast<float*>(output_buffer), n_frames);
   return 0;
 }

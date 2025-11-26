@@ -160,17 +160,21 @@ private:
   void update_state_stopped();
 
   static int audio_callback(void *output_buffer, void *input_buffer, unsigned int n_frames,
-                     double stream_time, RtAudioStreamStatus status, void *user_data);
+                     double stream_time, RtAudioStreamStatus status, void *user_data) noexcept;
 
   std::unique_ptr<RtAudio> p_rtaudio;
 
   std::atomic<eAudioEngineState> m_state;
   std::atomic<unsigned int> m_tracks_playing;
-  std::atomic<unsigned int> m_total_frames_processed;
+  std::atomic<uint64_t> m_total_frames_processed;
   std::atomic<unsigned int> m_device_id;
   std::atomic<unsigned int> m_channels;
   std::atomic<unsigned int> m_sample_rate;
   std::atomic<unsigned int> m_buffer_frames;
+
+  // TEST
+  std::atomic<bool> m_test_tone_enabled{false};
+  std::atomic<double> m_test_tone_phase{0.0};
 };
 
 }  // namespace Audio
