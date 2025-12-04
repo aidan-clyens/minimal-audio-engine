@@ -30,14 +30,14 @@ CLI::CLI()
       auto devices = m_engine.get_midi_devices();
       for (const auto &device : devices)
       {
-        std::cout << "MIDI Device ID: " << device.id << ", Name: " << device.name << "\n";
+        std::cout << "MIDI Device ID: " << device->id << ", Name: " << device->name << "\n";
       }
     }},
     {eCLICommand::ListAudioDevices, [this]() {
       auto devices = m_engine.get_audio_devices();
       for (const auto &device : devices)
       {
-        std::cout << "Audio Device ID: " << device.id << ", Name: " << device.name << "\n";
+        std::cout << "Audio Device ID: " << device->id << ", Name: " << device->name << "\n";
       }
     }},
     {eCLICommand::ListTracks, [this]() {
@@ -50,7 +50,17 @@ CLI::CLI()
     {eCLICommand::AddTrack, [this]() {
       m_engine.add_track();
       std::cout << "Track added. Total tracks: " << m_engine.get_track_count() << "\n";
-    }}
+    }},
+    {eCLICommand::AddTrackAudioInput, [this]() {
+      auto track = m_engine.get_track(m_engine.get_track_count() - 1);
+      // track->add_audio_input(0); // Add default audio input
+      std::cout << "Added audio input to track: " << track->to_string() << "\n";
+    }},
+    {eCLICommand::AddTrackAudioOutput, [this]() {
+      auto track = m_engine.get_track(m_engine.get_track_count() - 1);
+      track->add_audio_output(0); // Add default audio output
+      std::cout << "Added audio output to track: " << track->to_string() << "\n";
+    }},
   };
 }
 
@@ -84,6 +94,10 @@ eCLICommand CLI::parse_command(const std::string &cmd)
     return eCLICommand::ListTracks;
   else if (cmd == "add-track")
     return eCLICommand::AddTrack;
+  else if (cmd == "add-track-audio-input")
+    return eCLICommand::AddTrackAudioInput;
+  else if (cmd == "add-track-audio-output")
+    return eCLICommand::AddTrackAudioOutput;
   else
     return eCLICommand::Unknown;
 }
@@ -91,12 +105,14 @@ eCLICommand CLI::parse_command(const std::string &cmd)
 void CLI::help()
 {
   std::cout << "Available commands:\n";
-  std::cout << "  help, h       - Show this help message\n";
-  std::cout << "  midi-devices  - List available MIDI devices\n";
-  std::cout << "  audio-devices - List available Audio devices\n";
-  std::cout << "  list-tracks   - List all tracks\n";
-  std::cout << "  add-track     - Add a new track\n";
-  std::cout << "  quit, q       - Quit the application\n";
+  std::cout << "  help, h                 - Show this help message\n";
+  std::cout << "  midi-devices            - List available MIDI devices\n";
+  std::cout << "  audio-devices           - List available Audio devices\n";
+  std::cout << "  list-tracks             - List all tracks\n";
+  std::cout << "  add-track               - Add a new track\n";
+  std::cout << "  add-track-audio-input   - Add default audio input to the last track\n";
+  std::cout << "  add-track-audio-output  - Add default audio output to the last track\n";
+  std::cout << "  quit, q                 - Quit the application\n";
 }
 
 /** @brief Signal handler for graceful shutdown on SIGINT (Ctrl+C).

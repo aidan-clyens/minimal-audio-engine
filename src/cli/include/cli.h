@@ -23,6 +23,8 @@ enum class eCLICommand
   ListAudioDevices,
   ListTracks,
   AddTrack,
+  AddTrackAudioInput,
+  AddTrackAudioOutput,
   Unknown
 };
 
