@@ -1,5 +1,6 @@
 #include "audiointerface.h"
 
+#include "devicemanager.h"
 #include "logger.h"
 
 using namespace Audio;
@@ -52,6 +53,9 @@ AudioInterface::AudioInterface() : m_buffer_frames(512),
  */
 bool AudioInterface::open(unsigned int device_id)
 {
+  Devices::AudioDevice device = Devices::DeviceManager::instance().get_audio_device(device_id);
+  LOG_INFO("Open AudioInterface on device: ", device.to_string());
+
   unsigned int channels = m_channels.load(std::memory_order_relaxed);
   unsigned int sample_rate = m_sample_rate.load(std::memory_order_relaxed);
   unsigned int buffer_frames = m_buffer_frames.load(std::memory_order_relaxed);

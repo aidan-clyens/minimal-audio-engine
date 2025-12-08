@@ -9,43 +9,45 @@
 namespace Devices
 {
 
-/** @struct Device
- *  @brief Base structure for audio and MIDI devices
- */
-struct Device
-{
-  Device() = default;
-  ~Device() = default;
-
-  Device(const Device&) = default;
-  Device& operator=(const Device&) = default;
-
-  unsigned int id;
-  std::string name;
-  bool is_default_output;
-  bool is_default_input;
-
-  std::string to_string() const
+  /** @class Device
+   *  @brief Base structure for audio and MIDI devices
+   */
+  class Device
   {
-    return "Device(ID=" + std::to_string(id) +
-           ", Name=" + name +
-           ", DefaultOutput=" + (is_default_output ? "Yes" : "No") +
-           ", DefaultInput=" + (is_default_input ? "Yes" : "No") + ")";
-  }
+  public:
+    Device() = default;
+    ~Device() = default;
 
-  bool operator==(const Device& other) const
-  {
-    return id == other.id && name == other.name &&
-           is_default_output == other.is_default_output &&
-           is_default_input == other.is_default_input;
-  }
+    Device(const Device &) = default;
+    Device &operator=(const Device &) = default;
+
+    unsigned int id;
+    std::string name;
+    bool is_default_output;
+    bool is_default_input;
+
+    std::string to_string() const
+    {
+      return "Device(ID=" + std::to_string(id) +
+             ", Name=" + name +
+             ", DefaultOutput=" + (is_default_output ? "Yes" : "No") +
+             ", DefaultInput=" + (is_default_input ? "Yes" : "No") + ")";
+    }
+
+    bool operator==(const Device &other) const
+    {
+      return id == other.id && name == other.name &&
+             is_default_output == other.is_default_output &&
+             is_default_input == other.is_default_input;
+    }
 };
 
-/** @struct AudioDevice
+/** @class AudioDevice
  *  @brief Audio device
  */
-struct AudioDevice : public Device
+class AudioDevice : public Device
 {
+public:
   AudioDevice() = default;
   ~AudioDevice() = default;
 
@@ -82,11 +84,12 @@ struct AudioDevice : public Device
   }
 };
 
-/** @struct MidiDevice
+/** @class MidiDevice
  *  @brief MIDI device
  */
-struct MidiDevice : public Device
+class MidiDevice : public Device
 {
+public:
   MidiDevice() = default;
   ~MidiDevice() = default;
 
