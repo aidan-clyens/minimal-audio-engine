@@ -1,9 +1,12 @@
 #include <gtest/gtest.h>
 #include <thread>
 #include <chrono>
+#include "devicemanager.h"
 #include "audioengine.h"
+#include "audiodevice.h"
 
 using namespace Audio;
+using namespace Devices;
 
 class AudioEngineTest : public ::testing::Test
 {
@@ -78,9 +81,13 @@ TEST_F(AudioEngineTest, SetOutputDevice)
   auto &engine = AudioEngine::instance();
 
   unsigned int device_id = 1; // Example device ID
-  engine.set_output_device(device_id);
+  AudioDevice device = DeviceManager::instance().get_audio_device(device_id);
+
+  engine.set_output_device(device);
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
-  EXPECT_EQ(engine.get_output_device(), device_id);
+  EXPECT_EQ(device.id, device_id);
+  EXPECT_EQ(device.input_channels, 0);
+  EXPECT_NE(device.output_channels, 0);
 }
 
 /** @brief Set Stream Parameters 

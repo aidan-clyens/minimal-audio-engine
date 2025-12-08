@@ -9,6 +9,7 @@
 #include "observer.h"
 #include "midiengine.h"
 #include "devicemanager.h"
+#include "audiodevice.h"
 
 // Forward declarations
 namespace Audio
@@ -36,7 +37,7 @@ public:
   Track() = default;
   ~Track() = default;
 
-  Devices::AudioDevice add_audio_input(const unsigned int device_id = 0);
+  void add_audio_input(const Devices::AudioDevice& device = Devices::AudioDevice{});
   void add_audio_file_input(const std::shared_ptr<Files::WavFile> &wav_file);
   void add_midi_input(const unsigned int device_id = 0);
   void add_midi_file_input(const Files::MidiFile &midi_file);

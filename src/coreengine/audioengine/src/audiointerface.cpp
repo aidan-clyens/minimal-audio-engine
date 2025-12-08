@@ -51,18 +51,16 @@ AudioInterface::AudioInterface() : m_buffer_frames(512),
  *  @param device_id The ID of the audio device to open
  *  @return true on success, false on failure
  */
-bool AudioInterface::open(unsigned int device_id)
+bool AudioInterface::open(const Devices::AudioDevice &device)
 {
-  Devices::AudioDevice device = Devices::DeviceManager::instance().get_audio_device(device_id);
   LOG_INFO("Open AudioInterface on device: ", device.to_string());
-
-  unsigned int channels = m_channels.load(std::memory_order_relaxed);
+  
+  unsigned int channels = device.input_channels > 0 ? device.input_channels : device.output_channels;
   unsigned int sample_rate = m_sample_rate.load(std::memory_order_relaxed);
   unsigned int buffer_frames = m_buffer_frames.load(std::memory_order_relaxed);
 
-  LOG_INFO("AudioInterface: Open stream on device: ", device_id, ", with channels: ", channels, ", sample rate: ", sample_rate, ", buffer frames: ", buffer_frames);
-
-  RtAudio::StreamParameters params{device_id, channels, 0};
+  LOG_INFO("AudioInterface: Open stream on device: ", device.id, ", with channels: ", channels, ", sample rate: ", sample_rate, ", buffer frames: ", buffer_frames);
+  RtAudio::StreamParameters params{device.id, channels, 0};
 
   if (m_rtaudio.openStream(&params,
                            nullptr,
@@ -72,7 +70,7 @@ bool AudioInterface::open(unsigned int device_id)
                            &audio_callback,
                            this) != RTAUDIO_NO_ERROR)
   {
-    LOG_ERROR("AudioInterface: Failed to open RtAudio stream on device: ", device_id);
+    LOG_ERROR("AudioInterface: Failed to open RtAudio stream on device: ", device.to_string());
     return false;
   }
 

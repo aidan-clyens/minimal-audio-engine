@@ -13,14 +13,12 @@ using namespace Tracks;
 /** @brief Adds an audio input to the track.
  *  @param device_id The ID of the audio input device. Defaults to 0 (the default input device).
  */
-Devices::AudioDevice Track::add_audio_input(const unsigned int device_id)
+void Track::add_audio_input(const Devices::AudioDevice& device)
 {
   if (has_audio_input())
   {
     throw std::runtime_error("This track already has an audio input.");
   }
-
-  Devices::AudioDevice device = Devices::DeviceManager::instance().get_audio_device(device_id);
 
   // Verify the audio device has input channels
   if (device.input_channels < 1)
@@ -30,8 +28,7 @@ Devices::AudioDevice Track::add_audio_input(const unsigned int device_id)
 
   m_audio_input_device = device;
 
-  LOG_INFO("Track: Added audio input device: ", device.name);
-  return device;
+  LOG_INFO("Track: Added audio input device: ", device.to_string());
 }
 
 /** @brief Adds a MIDI input device to the track.
@@ -92,7 +89,7 @@ Devices::AudioDevice Track::add_audio_output(const unsigned int device_id)
   }
 
   m_audio_output_device = device;
-  Audio::AudioEngine::instance().set_output_device(device_id);
+  Audio::AudioEngine::instance().set_output_device(device);
 
   LOG_INFO("Track: Added audio output device: ", device.name);
   return device;

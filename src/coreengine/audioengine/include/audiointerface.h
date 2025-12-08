@@ -5,6 +5,7 @@
 #include <atomic>
 #include <rtaudio/RtAudio.h>
 
+#include "audiodevice.h"
 #include "logger.h"
 
 namespace Audio
@@ -49,7 +50,7 @@ public:
   AudioInterface();
   ~AudioInterface();
 
-  bool open(unsigned int device_id);
+  bool open(const Devices::AudioDevice &device);
   bool start();
   bool close();
 

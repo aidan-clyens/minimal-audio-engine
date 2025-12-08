@@ -9,6 +9,7 @@
 
 #include "engine.h"
 #include "audiointerface.h"
+#include "audiodevice.h"
 
 namespace Devices
 {
@@ -45,7 +46,7 @@ enum class eAudioEngineCommand
  */
 struct SetDevicePayload
 {
-  unsigned int device_id;
+  Devices::AudioDevice device;
 };
 
 /** @struct SetStreamParamsPayload
@@ -102,7 +103,7 @@ public:
 
   void play();
   void stop();
-  void set_output_device(const unsigned int device_id);
+  void set_output_device(const Devices::AudioDevice& device);
   void set_stream_parameters(
     const unsigned int channels,
     const unsigned int sample_rate,
@@ -113,9 +114,9 @@ public:
     return m_state.load(std::memory_order_acquire);
   }
 
-  inline unsigned int get_output_device() const noexcept
+  inline Devices::AudioDevice get_output_device() const noexcept
   {
-    return m_device_id.load(std::memory_order_relaxed);
+    return m_output_device;
   }
 
   inline unsigned int get_channels() const noexcept
@@ -165,6 +166,7 @@ private:
   std::atomic<uint64_t> m_total_frames_processed;
 
   std::atomic<unsigned int> m_device_id;
+  Devices::AudioDevice m_output_device;
 
   // TEST
   std::atomic<bool> m_test_tone_enabled{false};

@@ -40,17 +40,17 @@ TEST(TrackTest, AddAudioInput)
   auto track = TrackManager::instance().get_track(0);
 
   // Find a valid audio input device
-  std::optional<Devices::AudioDevice> expected_device = Devices::DeviceManager::instance().get_default_audio_input_device();
-  EXPECT_TRUE(expected_device.has_value()) << "No audio input device found for testing";
-  LOG_INFO("Adding audio input device: " + expected_device->to_string());
+  auto device = Devices::DeviceManager::instance().get_default_audio_input_device();
+  EXPECT_TRUE(device.has_value()) << "No audio input device found for testing";
+  LOG_INFO("Adding audio input device: " + device->to_string());
 
   // Add audio input to the track
-  Devices::AudioDevice device = track->add_audio_input(expected_device->id);
+  track->add_audio_input(device.value());
   LOG_INFO("Updated track 0: ", track->to_string());
 
   // Verify the track has an audio input
   EXPECT_TRUE(track->has_audio_input());
-  EXPECT_EQ(track->get_audio_input(), expected_device);
+  EXPECT_EQ(track->get_audio_input(), device.value());
 }
 
 /** @brief Track - Remove Audio Input
@@ -76,20 +76,20 @@ TEST(TrackTest, AddAudioInput_InvalidDevice)
 {
   auto track = TrackManager::instance().get_track(0);
 
-  // Attempt to add an invalid audio input device
-  unsigned int invalid_device_id = 9999; // Assuming this ID does not exist
+  // Get an output device to trigger invalid input
+  auto output_device = Devices::DeviceManager::instance().get_default_audio_output_device();
   try
   {
-    track->add_audio_input(invalid_device_id);
-    FAIL() << "Expected std::out_of_range exception for invalid device ID";
+    track->add_audio_input(output_device.value());
+    FAIL() << "Expected std::runtime_error exception for invalid device ID";
   }
-  catch (const std::out_of_range& e)
+  catch (const std::runtime_error& e)
   {
     SUCCEED();
   }
   catch (...)
   {
-    FAIL() << "Expected std::out_of_range exception for invalid device ID";
+    FAIL() << "Expected std::runtime_error exception for invalid device ID";
   }
 
   // Verify the track does not have an audio input

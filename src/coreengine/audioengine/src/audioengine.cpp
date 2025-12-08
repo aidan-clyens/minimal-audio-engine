@@ -79,11 +79,11 @@ void AudioEngine::stop()
 /** @brief Set Audio Output Device - External API
  *  - Audio Output Device ID
  */
-void AudioEngine::set_output_device(const unsigned int device_id)
+void AudioEngine::set_output_device(const Devices::AudioDevice& device)
 {
   AudioMessage msg;
   msg.command = eAudioEngineCommand::SetDevice;
-  msg.payload = SetDevicePayload{device_id};
+  msg.payload = SetDevicePayload{device};
   push_message(std::move(msg));
 }
 
@@ -157,7 +157,7 @@ void AudioEngine::handle_messages()
           }
 
           auto &payload = std::get<SetDevicePayload>(message->payload);
-          m_device_id.store(payload.device_id, std::memory_order_relaxed);
+          m_output_device = payload.device;
         }
         break;
       case eAudioEngineCommand::SetParams:
@@ -231,7 +231,7 @@ void AudioEngine::update_state_start()
     return;
   }
 
-  if (!p_audio_interface->open(m_device_id.load(std::memory_order_relaxed)))
+  if (!p_audio_interface->open(m_output_device))
   {
     LOG_ERROR("AudioEngine: Failed to open audio interface.");
     m_state.store(eAudioEngineState::Idle, std::memory_order_release);
