@@ -23,7 +23,7 @@ public:
 
   size_t add_track();
   void remove_track(size_t index);
-  std::shared_ptr<Track> get_track(size_t index);
+  TrackPtr get_track(size_t index);
 
   void clear_tracks();
 
@@ -33,7 +33,7 @@ private:
   TrackManager() = default;
   virtual ~TrackManager() = default;
 
-  std::vector<std::shared_ptr<Track>> m_tracks;
+  std::vector<TrackPtr> m_tracks;
 };
 
 }  // namespace Tracks

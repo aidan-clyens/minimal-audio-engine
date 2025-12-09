@@ -44,9 +44,12 @@ public:
   std::vector<Devices::MidiDevice> get_midi_devices();
   std::vector<Devices::AudioDevice> get_audio_devices();
 
+  Devices::MidiDevice get_midi_device(unsigned int device_id) const;
+  Devices::AudioDevice get_audio_device(unsigned int device_id) const;
+
   // Track management commands
-  std::vector<std::shared_ptr<Tracks::Track>> get_tracks();
-  std::shared_ptr<Tracks::Track> get_track(size_t track_id);
+  std::vector<Tracks::TrackPtr> get_tracks();
+  Tracks::TrackPtr get_track(size_t track_id);
   size_t get_track_count() const { return Tracks::TrackManager::instance().get_track_count(); }
   void add_track();
   void remove_track(size_t track_id);

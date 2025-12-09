@@ -34,7 +34,7 @@ void TrackManager::remove_track(size_t index)
  *  @return A shared pointer to the Track at the specified index.
  *  @throws std::out_of_range if the index is invalid.
  */
-std::shared_ptr<Track> TrackManager::get_track(size_t index)
+TrackPtr TrackManager::get_track(size_t index)
 {
   if (index >= m_tracks.size())
   {

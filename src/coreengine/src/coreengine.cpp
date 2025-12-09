@@ -29,6 +29,16 @@ std::vector<Devices::AudioDevice> CoreEngine::get_audio_devices()
   return Devices::DeviceManager::instance().get_audio_devices();
 }
 
+Devices::MidiDevice CoreEngine::get_midi_device(unsigned int device_id) const
+{
+  return Devices::DeviceManager::instance().get_midi_device(device_id);
+}
+
+Devices::AudioDevice CoreEngine::get_audio_device(unsigned int device_id) const
+{
+  return Devices::DeviceManager::instance().get_audio_device(device_id);
+}
+
 std::vector<std::shared_ptr<Tracks::Track>> CoreEngine::get_tracks()
 {
   size_t count = Tracks::TrackManager::instance().get_track_count();
@@ -43,6 +53,11 @@ std::vector<std::shared_ptr<Tracks::Track>> CoreEngine::get_tracks()
     }
   }
   return tracks;
+}
+
+Tracks::TrackPtr CoreEngine::get_track(size_t track_id)
+{
+  return Tracks::TrackManager::instance().get_track(track_id);
 }
 
 void CoreEngine::add_track()
