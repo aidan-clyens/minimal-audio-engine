@@ -15,6 +15,7 @@ std::vector<std::filesystem::path> FileManager::list_directory(const std::filesy
 {
   std::vector<std::filesystem::path> contents;
 
+  std::filesystem::path normalized_path = std::filesystem::weakly_canonical(path);
   std::filesystem::path absolute_path = convert_to_absolute(path);
 
   if (!path_exists(absolute_path) || !is_directory(absolute_path))
@@ -97,15 +98,21 @@ void FileManager::save_to_wav_file(std::vector<float> audio_buffer, const std::f
 /** @brief Loads audio data from a WAV file.
  *  @param path The path to the WAV file to load.
  *  @return An AudioFile object containing the loaded audio data.
- *  @throws std::runtime_error if the file cannot be opened or read.
  */
 std::optional<WavFilePtr> FileManager::read_wav_file(const std::filesystem::path &path)
 {
-  std::filesystem::path absolute_path = convert_to_absolute(path);
+  std::filesystem::path normalized_path = std::filesystem::weakly_canonical(path);
+  std::filesystem::path absolute_path = convert_to_absolute(normalized_path);
 
-  if (!path_exists(absolute_path) || !is_wav_file(absolute_path))
+  if (!path_exists(absolute_path))
   {
-    LOG_ERROR("WAV file does not exist or is not a file: ", absolute_path.string());
+    LOG_ERROR("WAV file does not exist: ", absolute_path.string());
+    return std::nullopt;
+  }
+
+  if (!is_wav_file(absolute_path))
+  {
+    LOG_ERROR("File is not a WAV file: ", absolute_path.string());
     return std::nullopt;
   }
 
@@ -119,6 +126,7 @@ std::optional<WavFilePtr> FileManager::read_wav_file(const std::filesystem::path
  */
 std::optional<MidiFilePtr> FileManager::read_midi_file(const std::filesystem::path &path)
 {
+  std::filesystem::path normalized_path = std::filesystem::weakly_canonical(path);
   std::filesystem::path absolute_path = convert_to_absolute(path);
 
   if (!path_exists(absolute_path) || !is_midi_file(absolute_path))

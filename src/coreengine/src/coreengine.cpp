@@ -39,6 +39,17 @@ Devices::AudioDevice CoreEngine::get_audio_device(unsigned int device_id) const
   return Devices::DeviceManager::instance().get_audio_device(device_id);
 }
 
+Files::WavFilePtr CoreEngine::get_wav_file(const std::string &file_path) const
+{
+  auto wav_file = Files::FileManager::instance().read_wav_file(file_path);
+  if (!wav_file.has_value())
+  {
+    throw std::runtime_error("WAV file not found: " + file_path);
+  }
+
+  return wav_file.value();
+}
+
 std::vector<std::shared_ptr<Tracks::Track>> CoreEngine::get_tracks()
 {
   size_t count = Tracks::TrackManager::instance().get_track_count();

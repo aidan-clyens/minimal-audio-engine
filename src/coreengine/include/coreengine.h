@@ -3,6 +3,7 @@
 
 #include "engine.h"
 #include "devicemanager.h"
+#include "filemanager.h"
 #include "trackmanager.h"
 #include "track.h"
 
@@ -46,6 +47,9 @@ public:
 
   Devices::MidiDevice get_midi_device(unsigned int device_id) const;
   Devices::AudioDevice get_audio_device(unsigned int device_id) const;
+
+  // File management commands
+  Files::WavFilePtr get_wav_file(const std::string &file_path) const;
 
   // Track management commands
   std::vector<Tracks::TrackPtr> get_tracks();

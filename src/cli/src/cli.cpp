@@ -48,6 +48,9 @@ void CommandLine::stop()
   m_engine.stop_thread();
 }
 
+/** @brief Sets up autocomplete for the CLI.
+ *  Configures replxx to use the completion callback.
+ */
 void CommandLine::setup_autocomplete()
 {
   // Configure replxx settings
@@ -61,6 +64,9 @@ void CommandLine::setup_autocomplete()
   );
 }
 
+/** @brief Completion callback for replxx autocomplete.
+ *  Provides command suggestions based on current input.
+ */
 replxx::Replxx::completions_t CommandLine::completion_callback(std::string const& input, int& contextLen)
 {
   replxx::Replxx::completions_t completions;
@@ -185,8 +191,13 @@ replxx::Replxx::completions_t CommandLine::completion_callback(std::string const
       }
       catch (...) {}
     }
+    else if ((tokens.size() == 4 && ends_with_space && tokens[3] == "file") ||
+             (tokens.size() == 5 && !ends_with_space && tokens[3] == "file"))
+    {
+      // TODO - Skipping file path suggestions for now
+    }
   }
-  
+
   contextLen = static_cast<int>(input.length());
   return completions;
 }
@@ -357,9 +368,11 @@ void CommandLine::cmd_add_track_audio_input_file(unsigned int track_id, const st
   {
     auto track = m_engine.get_track(track_id);
     std::cout << "Adding Audio File Input " << file_path << " to Track " << track_id << "...\n";
-    
-    // TODO: Implement file input when track->add_audio_file_input is available
-    std::cout << "File input not yet implemented\n";
+
+    auto wav_file = m_engine.get_wav_file(file_path);
+    track->add_audio_file_input(wav_file);
+    std::cout << "Added Audio File Input to Track\n";
+    std::cout << track->to_string() << "\n";
   }
   catch (const std::exception &e)
   {
@@ -441,12 +454,17 @@ void CommandLine::show_help()
   std::cout << "  track <track_id> set-audio-output device <device_id>  - Set audio output to device\n";
 }
 
+/** @brief Signal handler for graceful shutdown on SIGINT (Ctrl+C).
+ *  This function sets the app_running flag to false, allowing the main loop to exit cleanly.
+ *  @param signum The signal number (not used here).
+ */
 void CommandLine::handle_shutdown_signal(int signum)
 {
   m_app_running = false;
 }
 
 /** @brief Runs the command-line interface, processing user input and executing commands.
+ *  This function enters a loop, reading commands from the user until the application is instructed to exit.
  */
 void CommandLine::run()
 {
