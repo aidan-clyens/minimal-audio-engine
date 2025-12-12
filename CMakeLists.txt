@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.25)
 
-project(DAW LANGUAGES CXX)
+project(minimal-audio-engine
+    VERSION 1.0.0
+    LANGUAGES CXX
+)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
@@ -67,4 +70,56 @@ else()
 endif()
 
 add_subdirectory(src)
-add_subdirectory(tests)
+
+option(BUILD_TESTS "Build unit tests" ON)
+if (BUILD_TESTS)
+    add_subdirectory(tests)
+endif()
+
+# Installation settings
+include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
+# Install library targets and header files
+install(TARGETS coreengine audioengine midiengine trackmanager filemanager devicemanager framework
+    EXPORT minimal-audio-engine-targets
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+    FILE_SET HEADERS DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/minimal-audio-engine
+)
+
+# Install header files
+install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/src/coreengine/
+    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/minimal-audio-engine/coreengine
+    FILES_MATCHING PATTERN "*.h"
+)
+
+# Export targets
+install(EXPORT minimal-audio-engine-targets
+    FILE minimal-audio-engine-targets.cmake
+    NAMESPACE minimal-audio-engine::
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/minimal-audio-engine
+)
+
+# Create package configuration file
+configure_package_config_file(
+    ${CMAKE_CURRENT_SOURCE_DIR}/cmake/minimal-audio-engine-config.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/minimal-audio-engine-config.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/minimal-audio-engine
+)
+
+# Create package version file
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/minimal-audio-engine-config-version.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMajorVersion
+)
+
+# Install package configuration files
+install(FILES
+    ${CMAKE_CURRENT_BINARY_DIR}/minimal-audio-engine-config.cmake
+    ${CMAKE_CURRENT_BINARY_DIR}/minimal-audio-engine-config-version.cmake
+    DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/minimal-audio-engine
+)

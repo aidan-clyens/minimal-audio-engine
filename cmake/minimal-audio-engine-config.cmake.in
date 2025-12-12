@@ -1,0 +1,19 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Find required dependencies
+if(WIN32)
+    find_dependency(RtAudio)
+    find_dependency(RtMidi)
+    find_dependency(SndFile)
+else()
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(RTAUDIO REQUIRED rtaudio)
+    pkg_check_modules(RTMIDI REQUIRED rtmidi)
+    pkg_check_modules(SNDFILE REQUIRED sndfile)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/minimal-audio-engine-targets.cmake")
+
+check_required_components(minimal-audio-engine)
