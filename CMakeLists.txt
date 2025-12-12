@@ -90,12 +90,6 @@ install(TARGETS coreengine audioengine midiengine trackmanager filemanager devic
     FILE_SET HEADERS DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/minimal-audio-engine
 )
 
-# Install header files
-install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/src/coreengine/
-    DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/minimal-audio-engine/coreengine
-    FILES_MATCHING PATTERN "*.h"
-)
-
 # Export targets
 install(EXPORT minimal-audio-engine-targets
     FILE minimal-audio-engine-targets.cmake

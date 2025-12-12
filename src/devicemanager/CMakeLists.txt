@@ -7,6 +7,9 @@ target_sources(devicemanager
       ${CMAKE_CURRENT_SOURCE_DIR}/include
     FILES
       include/devicemanager.h
+      include/device.h
+      include/audiodevice.h
+      include/mididevice.h
 )
 
 target_sources(devicemanager PRIVATE

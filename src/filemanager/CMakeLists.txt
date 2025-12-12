@@ -8,6 +8,7 @@ target_sources(filemanager
     FILES
       include/filemanager.h
       include/wavfile.h
+      include/midifile.h
 )
 
 target_sources(filemanager PRIVATE

@@ -7,6 +7,7 @@ target_sources(trackmanager
       ${CMAKE_CURRENT_SOURCE_DIR}/include
     FILES
       include/track.h
+      include/trackmanager.h
 )
 
 target_sources(trackmanager
