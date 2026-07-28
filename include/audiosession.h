@@ -75,7 +75,11 @@ public:
   bool stop();
 
   // State
-  eAudioSessionState get_state() const { return m_state; }
+  /** @brief Returns the current session state.
+   *  @note Not const: the session polls its tracks, so a session whose playback
+   *        has run to the end of its input reports Stopped from here on.
+   */
+  eAudioSessionState get_state();
 
 private:
   // Services

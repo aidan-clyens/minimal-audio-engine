@@ -28,6 +28,23 @@ enum eInputOutputDirection
   Output
 };
 
+/** @struct StreamConfig
+ *  @brief The negotiated audio format plus the ring buffer shared between the
+ *  producer (input) and consumer (output) ends of a stream.
+ *
+ *  The format is negotiated once by Track::play() and handed to both ends, so the
+ *  file reader and the audio device agree on sample rate, channel count and block
+ *  size. Samples in the buffer are interleaved floats.
+ */
+struct StreamConfig
+{
+  BufferPtr             buffer;
+  eInputOutputDirection direction{Input};
+  unsigned int          sample_rate{0};
+  unsigned int          channels{0};
+  unsigned int          block_frames{512};
+};
+
 /** @class IInputOutput
  *  @brief This is an abstract interface designated the derived object is an audio or MIDI I/O interface.
  */
@@ -54,14 +71,13 @@ public:
     return m_direction;
   }
 
-  virtual bool open_stream(const BufferPtr &buffer) = 0;
+  virtual bool open_stream(const StreamConfig &config) = 0;
   virtual bool close_stream() = 0;
   virtual bool is_stream_open() = 0;
 
 private:
   eInputOutputType m_io_type = None;
   eInputOutputDirection m_direction = Input;
-  BufferPtr p_buffer = nullptr;
 };
 
 using IInputOutputPtr = std::shared_ptr<IInputOutput>;

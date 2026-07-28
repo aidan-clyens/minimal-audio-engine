@@ -216,12 +216,26 @@ public:
   std::string to_string() const;
 
 private:
-  bool open_stream(const framework::IInputOutputPtr &stream, const framework::BufferPtr &buffer);
+  bool open_stream(const framework::IInputOutputPtr &stream, const framework::StreamConfig &config);
+
+  /** @brief Derives the stream format from the audio input, clamped to what the
+   *  audio output can accept. There is no resampling in the data path, so both
+   *  ends must agree on sample rate and channel count.
+   */
+  framework::StreamConfig make_stream_config() const;
+
+  /** @brief Waits until the input has produced enough data to start playback,
+   *  so the first output callbacks do not underrun into silence.
+   */
+  void prime_buffer(const framework::StreamConfig &config) const;
 
   void handle_midi_message(const midi::MidiMessage& message); // TODO - Remove
 
   eTrackState m_state = eTrackState::Stopped;
-  
+
+  // Shared between the audio input (producer) and audio output (consumer).
+  framework::BufferPtr p_buffer;
+
   TrackEventCallback m_event_callback;
 
   framework::IInputOutputPtr p_audio_input;

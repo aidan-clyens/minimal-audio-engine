@@ -42,6 +42,11 @@ public:
   bool play();
   bool stop();
 
+  /** @brief True while any track is still playing.
+   *  @note Not const: a track that has drained stops itself when polled.
+   */
+  bool is_playing();
+
 private:
   std::vector<TrackPtr> m_tracks;
 };

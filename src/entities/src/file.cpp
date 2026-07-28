@@ -101,9 +101,11 @@ bool File::close_stream()
   return p_impl->file_adapter.close_stream();
 }
 
-bool File::open_stream(const framework::BufferPtr &buffer)
+bool File::open_stream(const framework::StreamConfig &config)
 {
-  return p_impl->file_adapter.open_stream(get_filepath(), buffer, get_direction());
+  framework::StreamConfig stream_config = config;
+  stream_config.direction = get_direction();
+  return p_impl->file_adapter.open_stream(get_filepath(), stream_config);
 }
 
 std::string File::to_string() const
@@ -131,6 +133,14 @@ FilePtr FileHandleFactory::make_wav(const std::filesystem::path& path)
   auto impl = std::make_unique<File::Impl>();
   impl->file_type = File::eFileType::Wav;
   impl->filepath  = path;
+
+  // Read the format up front so sample rate, channels and frame count are
+  // available before a stream is opened.
+  if (!impl->file_adapter.probe(path))
+  {
+    return nullptr;
+  }
+
   return FilePtr(new File(std::move(impl)));
 }
 

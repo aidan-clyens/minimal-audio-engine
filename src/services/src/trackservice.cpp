@@ -73,3 +73,15 @@ bool TrackService::stop()
   }
   return true;
 }
+
+bool TrackService::is_playing()
+{
+  for (const auto &track : m_tracks)
+  {
+    if (track->is_playing())
+    {
+      return true;
+    }
+  }
+  return false;
+}

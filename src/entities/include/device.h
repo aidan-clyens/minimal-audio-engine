@@ -104,7 +104,7 @@ public:
   bool close_stream();
 
   /** @brief Open the Device's audio stream. Returns true if successful, else false */
-  bool open_stream(const framework::BufferPtr &buffer);
+  bool open_stream(const framework::StreamConfig &config);
 
   // MIDI-only accesors
 
