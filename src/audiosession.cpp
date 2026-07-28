@@ -100,3 +100,16 @@ bool AudioSession::stop()
   m_state = ret ? eAudioSessionState::Stopped : eAudioSessionState::Playing;
   return ret;
 }
+
+eAudioSessionState AudioSession::get_state()
+{
+  // Playback ends on its own when the input runs out, so ask the tracks rather
+  // than reporting a state that is only updated by play()/stop().
+  if (m_state == eAudioSessionState::Playing && !p_track_service->is_playing())
+  {
+    LOG_INFO("AudioSession: Playback finished.");
+    m_state = eAudioSessionState::Stopped;
+  }
+
+  return m_state;
+}

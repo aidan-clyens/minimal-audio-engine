@@ -2,15 +2,18 @@
 #define __RINGBUFFER_H__
 
 #include <array>
+#include <atomic>
+#include <algorithm>
 #include <cstddef>
-#include <mutex>
+#include <cstring>
+#include <type_traits>
 
 #include "logger.h"
 
 namespace miniaudioengine::framework
 {
 
-constexpr size_t BUFFER_SIZE = 8 * 1024;
+constexpr size_t BUFFER_SIZE = 32 * 1024;
 
 /** @enum eDirection
  *  @brief Read Audio/MIDI stream as input or output
@@ -22,116 +25,170 @@ enum class eDirection : unsigned int
 };
 
 /** @class RingBuffer
- *  @brief A Ring Buffer implementation for audio streaming.
- *  The data structure is single producer, single-consumer (SPSC).
- *  @tparam T The type of elements stored in the ring buffer.
- *  @tparam Size The maximum number of elements the ring buffer can hold.
+ *  @brief A lock-free Ring Buffer implementation for audio streaming.
+ *  The data structure is single-producer, single-consumer (SPSC). Exactly one
+ *  thread may call the producer methods (write/try_push/space/set_producer_finished)
+ *  and exactly one other thread may call the consumer methods (read/try_pop/available).
+ *  @tparam T The type of elements stored in the ring buffer. Must be trivially copyable.
+ *  @tparam Size The number of element slots. Must be a power of two.
  */
 template <typename T, size_t Size>
 class RingBuffer
 {
+  static_assert(Size > 1, "Size must be greater than one");
+  static_assert((Size & (Size - 1)) == 0, "Size must be a power of two");
+  static_assert(std::is_trivially_copyable_v<T>, "T must be trivially copyable");
+
 public:
   RingBuffer() = default;
   ~RingBuffer() = default;
 
-  /** @brief Attempts to push an item into the ring buffer.
-   *  @return true if the item was successfully pushed, false if the buffer is full.
+  /** @brief Writes up to `count` items into the buffer.
+   *  Producer side. Never blocks; writes as many items as there is space for.
+   *  @param src Source array to copy from.
+   *  @param count Number of items to write.
+   *  @return The number of items actually written, which may be less than `count`.
+   */
+  size_t write(const T *src, size_t count)
+  {
+    const size_t write_index = m_write_index.load(std::memory_order_relaxed);
+    const size_t read_index = m_read_index.load(std::memory_order_acquire);
+
+    const size_t writable = std::min(count, free_space(write_index, read_index));
+    if (writable == 0)
+    {
+      return 0;
+    }
+
+    // The writable region may wrap around the end of the array, so copy it in two parts.
+    const size_t first_part = std::min(writable, Size - write_index);
+    std::memcpy(&m_buffer[write_index], src, first_part * sizeof(T));
+    if (writable > first_part)
+    {
+      std::memcpy(&m_buffer[0], src + first_part, (writable - first_part) * sizeof(T));
+    }
+
+    m_write_index.store((write_index + writable) & (Size - 1), std::memory_order_release);
+    return writable;
+  }
+
+  /** @brief Reads up to `count` items out of the buffer.
+   *  Consumer side. Never blocks; reads as many items as are available.
+   *  @param dst Destination array to copy into.
+   *  @param count Number of items to read.
+   *  @return The number of items actually read, which may be less than `count`.
+   */
+  size_t read(T *dst, size_t count)
+  {
+    const size_t read_index = m_read_index.load(std::memory_order_relaxed);
+    const size_t write_index = m_write_index.load(std::memory_order_acquire);
+
+    const size_t readable = std::min(count, used_space(write_index, read_index));
+    if (readable == 0)
+    {
+      return 0;
+    }
+
+    // The readable region may wrap around the end of the array, so copy it in two parts.
+    const size_t first_part = std::min(readable, Size - read_index);
+    std::memcpy(dst, &m_buffer[read_index], first_part * sizeof(T));
+    if (readable > first_part)
+    {
+      std::memcpy(dst + first_part, &m_buffer[0], (readable - first_part) * sizeof(T));
+    }
+
+    m_read_index.store((read_index + readable) & (Size - 1), std::memory_order_release);
+    return readable;
+  }
+
+  /** @brief Attempts to push a single item into the ring buffer.
    *  @param item The item to be pushed into the buffer.
-   *  @note If the buffer is full, the item will not be added and the method will return false.
    *  @return false if the buffer is full. True otherwise.
    */
   bool try_push(const T &item)
   {
-    std::lock_guard<std::mutex> guard(m_mutex);
-
-    // Check if the buffer is full
-    size_t current_write = m_write_index;
-    size_t next_write = (current_write + 1) % Size;
-    size_t current_read = m_read_index;
-
-    if (next_write == current_read)
-    {
-      // Buffer is full, cannot push
-      return false;
-    }
-
-    m_buffer[current_write] = item;
-    m_write_index = next_write;
-    return true;
+    return write(&item, 1) == 1;
   }
 
-  /** @brief Attempts to pop an item from the ring buffer.
-   *  @return true if an item was successfully popped, false if the buffer is empty.
+  /** @brief Attempts to pop a single item from the ring buffer.
    *  @param item Reference to store the popped item.
-   *  @note If the buffer is empty, no item will be retrieved and the method will return false.
    *  @return false if the buffer is empty. True otherwise.
    */
   bool try_pop(T &item)
   {
-    std::lock_guard<std::mutex> guard(m_mutex);
-
-    // Check if the buffer is empty
-    size_t current_read = m_read_index;
-    size_t current_write = m_write_index;
-
-    if (current_read == current_write)
-    {
-      // Buffer is empty, cannot pop
-      return false;
-    }
-
-    item = m_buffer[current_read];
-    size_t next_read = (current_read + 1) % Size;
-    m_read_index = next_read;
-    return true;
+    return read(&item, 1) == 1;
   }
 
-  /** @brief Returns the current number of items in the ring buffer.
-   *  @return The number of items currently stored in the buffer.
-   *  @note This method is lock-free and safe for use in real-time contexts.
+  /** @brief Returns the number of items currently readable.
+   *  Safe to call from the consumer thread. From the producer thread the result
+   *  is a lower bound, since the consumer may drain further at any moment.
    */
-  size_t size() const
+  size_t available() const
   {
-    std::lock_guard<std::mutex> guard(m_mutex);
-
-    size_t current_write = m_write_index;
-    size_t current_read = m_read_index;
-
-    if (current_write >= current_read)
-    {
-      return current_write - current_read;
-    }
-    else
-    {
-      return Size - (current_read - current_write);
-    }
+    return used_space(m_write_index.load(std::memory_order_acquire),
+                      m_read_index.load(std::memory_order_acquire));
   }
 
-  /** @brief Returns the maximum capacity of the ring buffer.
-   *  @return The maximum number of items the buffer can hold.
-   *  @note This method is lock-free and safe for use in real-time contexts.
-   *  @note The usable capacity is Size - 1 to distinguish between full and empty states.
+  /** @brief Returns the number of items that can currently be written.
+   *  Safe to call from the producer thread. From the consumer thread the result
+   *  is a lower bound, since the producer may fill further at any moment.
+   */
+  size_t space() const
+  {
+    return free_space(m_write_index.load(std::memory_order_acquire),
+                      m_read_index.load(std::memory_order_acquire));
+  }
+
+  /** @brief Returns the maximum number of items the buffer can hold.
+   *  @note One slot is reserved to distinguish full from empty.
    */
   size_t capacity() const
   {
-    return Size - 1; // One slot is used to distinguish full vs empty
+    return Size - 1;
   }
 
   /** @brief Clears the ring buffer, resetting it to an empty state.
-   *  @note This method is not thread-safe and should only be called when no other threads are accessing the buffer.
+   *  @note Not thread-safe. Only call when neither producer nor consumer is running.
    */
   void clear()
   {
-    m_write_index = 0;
-    m_read_index = 0;
+    m_write_index.store(0, std::memory_order_relaxed);
+    m_read_index.store(0, std::memory_order_relaxed);
+    m_producer_finished.store(false, std::memory_order_release);
+  }
+
+  /** @brief Marks the end of the stream. Set by the producer once it has no more data.
+   *  The consumer treats "producer finished AND available() == 0" as end of stream.
+   */
+  void set_producer_finished(bool finished = true)
+  {
+    m_producer_finished.store(finished, std::memory_order_release);
+  }
+
+  /** @brief Returns true if the producer has signalled that it has no more data. */
+  bool is_producer_finished() const
+  {
+    return m_producer_finished.load(std::memory_order_acquire);
   }
 
 private:
-  std::array<T, Size> m_buffer;
-  std::mutex m_mutex;
+  static size_t used_space(size_t write_index, size_t read_index)
+  {
+    return (write_index - read_index) & (Size - 1);
+  }
 
-  size_t m_write_index{0}; // Producer index
-  size_t m_read_index{0}; // Consumer index
+  static size_t free_space(size_t write_index, size_t read_index)
+  {
+    // One slot is reserved so that write_index == read_index unambiguously means empty.
+    return Size - 1 - used_space(write_index, read_index);
+  }
+
+  std::array<T, Size> m_buffer{};
+
+  std::atomic<size_t> m_write_index{0}; // Producer index
+  std::atomic<size_t> m_read_index{0};  // Consumer index
+
+  std::atomic<bool> m_producer_finished{false};
 };
 
 } // namespace miniaudioengine::framework

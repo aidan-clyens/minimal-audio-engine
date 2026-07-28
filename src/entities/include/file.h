@@ -71,13 +71,13 @@ public:
   /** @brief Format string, e.g. "WAV", "AIFF", "FLAC". Returns empty string for MIDI files. */
   std::string get_format_string() const;
 
-  /** @brief Returns true if the File's audio stream is open */
-  bool open_stream(const framework::BufferPtr &buffer);
+  /** @brief Open the File's audio stream. Returns true if successful, else false */
+  bool open_stream(const framework::StreamConfig &config);
 
   /** @brief Close the File's audio stream. Returns true if successful, else false */
   bool close_stream();
 
-    /** @brief Open the File's audio stream. Returns true if successful, else false */
+  /** @brief Returns true if the File's audio stream is open */
   bool is_stream_open();
 
 private:
@@ -100,8 +100,8 @@ class FileHandleFactory
 public:
   /** @brief Open a WAV (or other libsndfile-compatible) file for reading.
    *  @param path Absolute path to the audio file.
-   *  @return Shared pointer to the constructed File.
-   *  @throws std::runtime_error if the file cannot be opened by libsndfile.
+   *  @return Shared pointer to the constructed File, or nullptr if libsndfile
+   *          cannot read the file.
    */
   static FilePtr make_wav(const std::filesystem::path &path);
 

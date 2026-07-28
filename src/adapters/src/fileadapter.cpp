@@ -1,9 +1,16 @@
 #include "fileadapter.h"
 #include "logger.h"
 
+#include <algorithm>
 #include <chrono>
 
 using namespace miniaudioengine::adapters;
+
+namespace
+{
+/** @brief How long the reader sleeps when the ring buffer has no room. */
+constexpr auto BUFFER_FULL_BACKOFF = std::chrono::milliseconds(2);
+} // namespace
 
 bool FileAudioStreamThread::start(const Params &params)
 {
@@ -19,29 +26,15 @@ bool FileAudioStreamThread::start(const Params &params)
     return false;
   }
 
-  // Define input or output buffer
-  void *input_buffer = nullptr;
-  void *output_buffer = nullptr;
-
-  switch (params.direction)
+  if (params.config.buffer == nullptr)
   {
-    case framework::eInputOutputDirection::Input:
-      input_buffer = params.snd_file;
-      output_buffer = params.buffer.get();
-      break;
-    case framework::eInputOutputDirection::Output:
-      input_buffer = params.buffer.get();
-      output_buffer = params.snd_file;
-      break;
+    LOG_WARNING("FileAudioStreamThread: start - Stream buffer is null.");
+    return false;
   }
 
-  // Create new thread
-  p_audio_stream_thread = std::make_unique<std::jthread>(
-    FileAudioStreamThread::callback,
-    input_buffer,
-    output_buffer,
-    params
-  );
+  // Params is copied into the thread, so the worker holds its own shared_ptr to
+  // the ring buffer and keeps it alive for as long as it runs.
+  p_audio_stream_thread = std::make_unique<std::jthread>(FileAudioStreamThread::callback, params);
 
   LOG_DEBUG("FileAudioStreamThread: start - Started audio stream thread");
   return true;
@@ -51,75 +44,104 @@ bool FileAudioStreamThread::stop()
 {
   if (!is_running())
   {
-    LOG_WARNING("FileAudioStreamThread: stop - Audio stream not running");
-    return false;
+    return true;
   }
 
-  LOG_DEBUG("FileAudioStreamThread: stop - Stopped audio stream thread");
   p_audio_stream_thread->request_stop();
   p_audio_stream_thread->join();
+  p_audio_stream_thread.reset();
+
+  LOG_DEBUG("FileAudioStreamThread: stop - Stopped audio stream thread");
   return true;
 }
 
-void FileAudioStreamThread::callback(std::stop_token stop_token, void *input_buffer, void *output_buffer, const Params &params)
+void FileAudioStreamThread::callback(std::stop_token stop_token, Params params)
 {
   framework::set_thread_name("FileAudioStreamThread");
 
-  const size_t total_frames_to_read = params.n_frames_to_read * params.snd_file_info.channels;
-  const float cycle_time_s = 1.0 / (params.snd_file_info.samplerate / total_frames_to_read);
-  const unsigned int cycle_time_ms = (unsigned int)(cycle_time_s * 1000 * 0.9); // Read 10% faster than the expected bitrate
-
-  LOG_DEBUG("FileAudioStreamThread: callback - Sample Rate = ", params.snd_file_info.samplerate, " Cycle Time = ", cycle_time_ms, " ms");
-
-  while (true)
+  switch (params.config.direction)
   {
-    if (stop_token.stop_requested())
+    case framework::eInputOutputDirection::Input:
+      read_from_file(stop_token, params.snd_file, params);
+      break;
+    case framework::eInputOutputDirection::Output:
+      write_to_file(stop_token, params.snd_file, params);
+      break;
+    default:
+      LOG_ERROR("FileAudioStreamThread: callback - Unsupported stream direction: ", params.config.direction);
+      break;
+  }
+
+  // Whatever the reason for exiting, no more data is coming. Tell the consumer so
+  // it can drain what is left and stop instead of playing silence forever.
+  params.config.buffer->set_producer_finished();
+  LOG_DEBUG("FileAudioStreamThread: callback - Exiting. Producer marked finished.");
+}
+
+/** @brief Streams sample data from the file into the ring buffer.
+ *  Paced by the ring buffer's fill level rather than a timer: the consumer drains
+ *  the buffer at the hardware's rate, so keeping it topped up self-synchronises to
+ *  real time with no drift.
+ */
+void FileAudioStreamThread::read_from_file(std::stop_token stop_token, SndFile *file, const Params &params)
+{
+  framework::Buffer *buffer = params.config.buffer.get();
+
+  const size_t channels = static_cast<size_t>(params.snd_file_info.channels);
+  if (channels == 0)
+  {
+    LOG_ERROR("FileAudioStreamThread: read_from_file - File reports 0 channels.");
+    return;
+  }
+
+  const size_t block_frames = params.config.block_frames > 0 ? params.config.block_frames : 512u;
+
+  // sf_readf_float writes frames * channels floats, so the scratch buffer must be
+  // sized in samples, not frames. Allocated once, outside the loop.
+  std::vector<float> scratch(block_frames * channels);
+
+  LOG_DEBUG("FileAudioStreamThread: read_from_file - Sample Rate=", params.snd_file_info.samplerate,
+            ", Channels=", channels, ", Block Frames=", block_frames);
+
+  while (!stop_token.stop_requested())
+  {
+    const size_t space = buffer->space();
+    if (space < channels)
     {
-      LOG_DEBUG("FileAudioStreamThread: callback - Stop requested. Exiting...");
+      // Buffer is full: the consumer has not caught up yet.
+      std::this_thread::sleep_for(BUFFER_FULL_BACKOFF);
+      continue;
+    }
+
+    const size_t frames_to_read = std::min(block_frames, space / channels);
+    const sf_count_t frames_read = sf_readf_float(file, scratch.data(), static_cast<sf_count_t>(frames_to_read));
+
+    if (frames_read > 0)
+    {
+      buffer->write(scratch.data(), static_cast<size_t>(frames_read) * channels);
+    }
+
+    // A short read means end of file.
+    if (frames_read < static_cast<sf_count_t>(frames_to_read))
+    {
+      LOG_DEBUG("FileAudioStreamThread: read_from_file - Reached end of file.");
       break;
     }
-
-    switch (params.direction)
-    {
-      case framework::eInputOutputDirection::Input:
-      {
-        SndFile *file = static_cast<SndFile *>(input_buffer);
-        framework::Buffer *buffer = static_cast<framework::Buffer *>(output_buffer);
-        read_from_file(file, buffer, params.n_frames_to_read);
-        break;
-      }
-      case framework::eInputOutputDirection::Output:
-      {
-        framework::Buffer *buffer = static_cast<framework::Buffer *>(input_buffer);
-        SndFile *file = static_cast<SndFile *>(output_buffer);
-        write_to_file(buffer, file, params.n_frames_to_read);
-        break;
-      }
-    }
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(cycle_time_ms));
   }
 }
 
-void FileAudioStreamThread::read_from_file(SndFile *file, framework::Buffer *buffer, const size_t frames_to_read)
+void FileAudioStreamThread::write_to_file(std::stop_token stop_token, SndFile *file, const Params &params)
 {
-  LOG_DEBUG("FileAudioStreamThread: read_from_file: ", frames_to_read, " bytes");
-  // TODO - Read from File to Buffer
-  std::vector<float> buffer_data(frames_to_read);
-  FileAdapter::read_frames(file, buffer_data, frames_to_read);
-
-  // TODO - Transfer to Buffer
-  for (const float val : buffer_data)
-  {
-    buffer->try_push(val);
-  }
-}
-
-void FileAudioStreamThread::write_to_file(framework::Buffer *buffer, SndFile *file, const size_t frames_to_read)
-{
+  (void)stop_token;
   (void)file;
-  LOG_DEBUG("FileAudioStreamThread: write_to_file: ", frames_to_read, " bytes");
+  (void)params;
+  LOG_WARNING("FileAudioStreamThread: write_to_file - Recording to file is not implemented yet.");
   // TODO - Write from Buffer to File
+}
+
+FileAdapter::~FileAdapter()
+{
+  close_stream();
 }
 
 SndFile* FileAdapter::open(const char *filename)
@@ -138,58 +160,87 @@ void FileAdapter::close(SndFile *file)
   sf_close(file);
 }
 
-bool FileAdapter::open_stream(const std::filesystem::path &filename, const framework::BufferPtr &buffer, const framework::eInputOutputDirection &direction)
+bool FileAdapter::probe(const std::filesystem::path &filename)
 {
-  LOG_DEBUG("FileAdapter: open_stream - Opening audio stream");
-
-  if (m_audio_stream_thread.is_running())
-  {
-    LOG_WARNING("FileAdapter: open_stream - Audio stream thread is already running!");
-    if (!m_audio_stream_thread.stop())
-    {
-      LOG_ERROR("FileAdapter: open_stream - Failed to stop audio stream thread");
-      throw std::runtime_error("FileAdapter: open_stream - Failed to stop audio stream thread");
-    }
-  }
-
   SndFile *file = open(filename.string().c_str());
   if (file == nullptr)
   {
-    LOG_WARNING("FileAdapter: open_stream - Failed to open SndFile: ", filename);
+    LOG_WARNING("FileAdapter: probe - Failed to open SndFile: ", filename, " - ", sf_strerror(nullptr));
     return false;
   }
 
-  FileAudioStreamThread::Params params =
+  // m_info was populated by open(); the handle itself is not needed until playback.
+  close(file);
+
+  LOG_DEBUG("FileAdapter: probe - ", filename.string(),
+            " Sample Rate=", m_info.samplerate,
+            ", Channels=", m_info.channels,
+            ", Frames=", m_info.frames);
+  return true;
+}
+
+bool FileAdapter::open_stream(const std::filesystem::path &filename, const framework::StreamConfig &config)
+{
+  LOG_DEBUG("FileAdapter: open_stream - Opening audio stream");
+
+  if (config.buffer == nullptr)
   {
-    direction,
-    buffer,
-    file,
-    m_info,
-    1024
-  };
+    LOG_ERROR("FileAdapter: open_stream - Cannot open stream without a buffer.");
+    return false;
+  }
+
+  // Release any previous stream (thread first, then the handle it was reading).
+  if (!close_stream())
+  {
+    LOG_ERROR("FileAdapter: open_stream - Failed to close the previous audio stream");
+    return false;
+  }
+
+  p_stream_file = open(filename.string().c_str());
+  if (p_stream_file == nullptr)
+  {
+    LOG_WARNING("FileAdapter: open_stream - Failed to open SndFile: ", filename, " - ", sf_strerror(nullptr));
+    return false;
+  }
+
+  FileAudioStreamThread::Params params;
+  params.config = config;
+  params.snd_file = p_stream_file;
+  params.snd_file_info = m_info;
 
   if (!m_audio_stream_thread.start(params))
   {
     LOG_ERROR("FileAdapter: open_stream - Failed to start audio stream thread");
+    close(p_stream_file);
+    p_stream_file = nullptr;
     return false;
   }
 
-  return m_audio_stream_thread.is_running();
+  return true;
 }
 
 bool FileAdapter::close_stream()
 {
+  // The thread must be joined before the handle it reads from is closed.
   if (!m_audio_stream_thread.stop())
   {
-    LOG_ERROR("FileAdapter: open_stream - Failed to stop audio stream thread");
+    LOG_ERROR("FileAdapter: close_stream - Failed to stop audio stream thread");
     return false;
   }
+
+  if (p_stream_file != nullptr)
+  {
+    close(p_stream_file);
+    p_stream_file = nullptr;
+    LOG_DEBUG("FileAdapter: close_stream - Closed audio stream");
+  }
+
   return true;
 }
 
 bool FileAdapter::is_stream_open()
 {
-  return m_audio_stream_thread.is_running();
+  return p_stream_file != nullptr;
 }
 
 long long FileAdapter::read_frames(SndFile *file, std::vector<float> &buffer, long long frames_to_read)

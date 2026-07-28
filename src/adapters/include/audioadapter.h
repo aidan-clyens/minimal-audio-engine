@@ -19,10 +19,16 @@ typedef RtAudio::DeviceInfo AudioDeviceInfo;
 using RtAudioPtr = std::unique_ptr<RtAudio>;
 
 
-class AudioCallbackHandler : public framework::IAdapterCallback
+/** @class AudioCallbackHandler
+ *  @brief Hosts the RtAudio realtime callback.
+ *  @note The callback runs on RtAudio's realtime thread. It must not allocate,
+ *        lock, log, or block — see audio_callback's implementation.
+ */
+class AudioCallbackHandler
 {
 public:
-  struct Params : public framework::IAdapterCallback::IParams {};
+  /** @brief The user_data handed to RtAudio is the stream's negotiated config. */
+  using Params = framework::StreamConfig;
 
   static int audio_callback(void *output_buffer, void *input_buffer, unsigned int n_frames,
                             double stream_time, AudioStreamStatus status, void *user_data) noexcept;
@@ -42,7 +48,7 @@ public:
   unsigned int get_device_count();
   std::vector<DevicePtr> get_devices();
 
-  bool open_stream(const DeviceInfo &info, const framework::BufferPtr &buffer, const framework::eInputOutputDirection &direction);
+  bool open_stream(const DeviceInfo &info, const framework::StreamConfig &config);
   bool close_stream();
   bool stop_stream();
 
@@ -51,6 +57,10 @@ public:
 
 private:
   RtAudioPtr p_rtaudio;
+
+  // Handed to RtAudio as the callback's user_data, so it must outlive the open
+  // stream. Owned by the AudioAdapter, which is owned by Device::Impl.
+  framework::StreamConfig m_config;
 
   static DevicePtr make_device_handle(const DeviceInfo &info)
   {
