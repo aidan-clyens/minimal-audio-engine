@@ -3,6 +3,7 @@ add_subdirectory(services)
 add_subdirectory(adapters)
 add_subdirectory(dataplane)
 add_subdirectory(entities)
+add_subdirectory(backends)
 
 add_library(audiosession STATIC)
 

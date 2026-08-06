@@ -15,6 +15,8 @@ target_sources(framework
       include/graph.h
       include/processor.h
       include/adapter.h
+      include/audiobackend.h
+      include/midibackend.h
 )
 
 target_sources(framework PRIVATE
