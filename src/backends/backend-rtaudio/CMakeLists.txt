@@ -9,6 +9,10 @@ target_sources(backend-rtaudio
         include/audiobackend-rtaudio.h
 )
 
+target_sources(backend-rtaudio PRIVATE
+    src/audiobackend-rtaudio.cpp
+)
+
 target_include_directories(backend-rtaudio
   PUBLIC
     $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -16,7 +20,7 @@ target_include_directories(backend-rtaudio
 
 target_link_libraries(backend-rtaudio
   PUBLIC
-    backends
+    framework
 )
 
 set_target_properties(backend-rtaudio PROPERTIES LINKER_LANGUAGE CXX)
